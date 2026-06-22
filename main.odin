@@ -1,4 +1,4 @@
-package hello_world
+package wordle
 
 import k2 "karl2d"
 

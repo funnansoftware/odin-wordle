@@ -37,7 +37,7 @@ odin build . \
     -build-mode:obj \
     -define:RAYLIB_WASM_LIB=env.o \
     -vet \
-    -out:"$OUT_DIR/odin-demo.wasm.o"
+    -out:"$OUT_DIR/wordle.wasm.o"
 
 # 2) Provide Odin's js runtime next to the page.
 cp "$ODIN_PATH/core/sys/wasm/js/odin.js" "$OUT_DIR/odin.js"
@@ -45,7 +45,7 @@ cp "$ODIN_PATH/core/sys/wasm/js/odin.js" "$OUT_DIR/odin.js"
 # 3) Link with emcc, pulling in the prebuilt raylib wasm library and generating
 #    index.html / index.js / index.wasm from our shell template.
 emcc -o "$OUT_DIR/index.html" \
-    "$OUT_DIR/odin-demo.wasm.o" \
+    "$OUT_DIR/wordle.wasm.o" \
     "$ODIN_PATH/vendor/raylib/wasm/libraylib.a" \
     -sUSE_GLFW=3 \
     -sWASM_BIGINT \
@@ -57,6 +57,6 @@ emcc -o "$OUT_DIR/index.html" \
     --shell-file web/shell.html
 
 # 4) The object file is no longer needed.
-rm -f "$OUT_DIR/odin-demo.wasm.o"
+rm -f "$OUT_DIR/wordle.wasm.o"
 
 echo "Web build created in $OUT_DIR/ (open index.html via a web server)."

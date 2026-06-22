@@ -1,5 +1,5 @@
 {
-    "name": "odin-demo",
+    "name": "odin-wordle",
     "build": {
         "dockerfile": "Dockerfile"
     },
