@@ -1,7 +1,10 @@
+#+feature dynamic-literals
+
 package wordle
 
 import "core:fmt"
 import "core:reflect"
+import "core:strings"
 import k2 "karl2d"
 
 Letter :: enum {
@@ -45,6 +48,11 @@ Row :: struct {
 	letters: [5]Letter,
 }
 
+Dictionary :: struct {
+	words:  [dynamic]string,
+	target: int,
+}
+
 GameBoard :: struct {
 	rows:          [6]Row,
 	letter_states: [Letter]LetterState,
@@ -52,13 +60,39 @@ GameBoard :: struct {
 	size:          f32,
 	spacing:       f32,
 	active_row:    int,
+	builder:       strings.Builder,
 }
 
 get_active_row :: proc(game_board: ^GameBoard) -> ^Row {
 	return &game_board.rows[game_board.active_row]
 }
 
-submit_active_row :: proc(game_board: ^GameBoard) {
+submit_active_row :: proc(game_board: ^GameBoard, dictionary: ^Dictionary) {
+
+	valid_word := false
+	active_row := get_active_row(game_board)
+	letters_to_string(active_row.letters, &game_board.builder)
+	guess := strings.to_string(game_board.builder)
+
+	for word in dictionary.words {
+		if guess == word {
+			valid_word = true
+			break
+		}
+	}
+
+	if !valid_word {
+		fmt.println("Invalid word: ", guess)
+		return
+	}
+
+	target_word := dictionary.words[dictionary.target]
+
+	if guess == target_word {
+		fmt.println("You win!")
+		return
+	}
+
 	if game_board.active_row < len(game_board.rows) - 1 {
 		game_board.active_row += 1
 	}
@@ -73,8 +107,16 @@ main :: proc() {
 	game_board.color_states[.Present] = {181, 159, 59, 255}
 	game_board.color_states[.Correct] = {83, 141, 78, 255}
 
+	dictionary := Dictionary{}
+	dictionary.target = 2
+	dictionary.words = [dynamic]string{"APPLE", "BANJO", "CRANE", "DELTA", "EAGLE", "FABLE"}
+	defer delete(dictionary.words)
+
+	strings.builder_init(&game_board.builder)
+	defer strings.builder_destroy(&game_board.builder)
+
 	init(&game_board)
-	for step(&game_board) {}
+	for step(&game_board, &dictionary) {}
 	shutdown()
 }
 
@@ -83,7 +125,7 @@ init :: proc(game_board: ^GameBoard) {
 	k2.set_window_position(1280, 360)
 }
 
-step :: proc(game_board: ^GameBoard) -> bool {
+step :: proc(game_board: ^GameBoard, dictionary: ^Dictionary) -> bool {
 	if !k2.update() {
 		return false
 	}
@@ -115,38 +157,10 @@ step :: proc(game_board: ^GameBoard) -> bool {
 					}
 				}
 			} else if e.key == k2.Keyboard_Key.Enter {
-				// submit_active_row(game_board)
+				submit_active_row(game_board, dictionary)
 			}
 		}
 	}
-
-
-	// for key, state in k2.get_keyboard_state() {
-	// 	if state == k2.KeyState.Pressed {
-	// 		letter := keys_to_letters(key)
-
-	// 		if letter == .None {
-	// 			continue
-	// 		}
-
-	// 		for i, l in active_row.letters {
-	// 			if l == Letter.None {
-	// 				active_row.letters[i] = letter
-	// 				break
-	// 			}
-	// 		}
-	// 	}
-	// } else if key == k2.Keyboard_Key.Backspace {
-	// 	for i := len(active_row.letters) - 1; i >= 0; i-- {
-	// 		if active_row.letters[i] != Letter.None {
-	// 			active_row.letters[i] = Letter.None
-	// 			break
-	// 		}
-	// 	}
-	// } else if key == k2.Keyboard_Key.Enter {
-	// 	submit_active_row(game_board)
-	// }
-	// }
 
 	// Render
 	k2.clear(k2.BLACK)
@@ -271,4 +285,16 @@ keys_to_letters :: proc(key: k2.Keyboard_Key) -> Letter {
 	}
 
 	return .None
+}
+
+letters_to_string :: proc(letters: [5]Letter, builder: ^strings.Builder) {
+	strings.builder_reset(builder)
+
+	for letter, _ in letters {
+		if letter == Letter.None {
+			continue
+		}
+
+		strings.write_string(builder, reflect.enum_string(letter))
+	}
 }
