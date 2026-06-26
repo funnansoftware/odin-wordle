@@ -45,8 +45,13 @@ LetterState :: enum {
 	Correct,
 }
 
+Guess :: struct {
+	letter: Letter,
+	state:  LetterState,
+}
+
 Row :: struct {
-	letters: [5]Letter,
+	letters: [5]Guess,
 }
 
 Dictionary :: struct {
@@ -60,15 +65,15 @@ Message :: struct {
 }
 
 GameBoard :: struct {
-	messages:      [dynamic]Message,
-	rows:          [6]Row,
-	letter_states: [Letter]LetterState,
-	color_states:  [LetterState]k2.Color,
-	size:          f32,
-	spacing:       f32,
-	active_row:    int,
-	builder:       strings.Builder,
-	elapsed_time:  time.Duration,
+	messages:       [dynamic]Message,
+	rows:           [6]Row,
+	keyboard_state: [Letter]LetterState,
+	color_states:   [LetterState]k2.Color,
+	size:           f32,
+	spacing:        f32,
+	active_row:     int,
+	builder:        strings.Builder,
+	elapsed_time:   time.Duration,
 }
 
 get_active_row :: proc(game_board: ^GameBoard) -> ^Row {
@@ -101,11 +106,46 @@ submit_active_row :: proc(game_board: ^GameBoard, dictionary: ^Dictionary) {
 		return
 	}
 
-	target_word := dictionary.words[dictionary.target]
+	target := string_to_letters(dictionary.words[dictionary.target])
 
-	if guess == target_word {
-		fmt.println("You win!")
-		return
+	target_letter_count := make(map[Letter]int)
+	defer delete(target_letter_count)
+
+	for letter in target {
+		target_letter_count[letter] += 1
+	}
+
+	for &g, i in active_row.letters {
+		g.state = LetterState.Absent
+		for t, k in target {
+			if g.letter == t {
+				if i == k {
+					g.state = LetterState.Correct
+					target_letter_count[g.letter] -= 1
+				}
+			}
+		}
+	}
+
+	for &g, i in active_row.letters {
+		for t, k in target {
+			if g.letter == t && i != k && target_letter_count[g.letter] > 0 {
+				g.state = LetterState.Present
+				target_letter_count[g.letter] -= 1
+			}
+		}
+	}
+
+	for letter in active_row.letters {
+		game_board.keyboard_state[letter.letter] = letter.state
+	}
+
+	success := true
+	for guess in active_row.letters {
+		if guess.state != LetterState.Correct {
+			success = false
+			break
+		}
 	}
 
 	if game_board.active_row < len(game_board.rows) - 1 {
@@ -146,7 +186,7 @@ main :: proc() {
 }
 
 init :: proc(game_board: ^GameBoard) {
-	k2.init(1280, 720, "Greetings from Karl2D!", {.Windowed_Resizable, false, false})
+	k2.init(1280, 720, "Wordle", {.Windowed_Resizable, false, false})
 	k2.set_window_position(1280, 360)
 }
 
@@ -165,19 +205,19 @@ step :: proc(game_board: ^GameBoard, dictionary: ^Dictionary) -> bool {
 
 			// Fill active row.
 			if current_letter != .None {
-				for &letter in active_row.letters {
-					if letter != Letter.None {
+				for &guess in active_row.letters {
+					if guess.letter != Letter.None {
 						continue
 					}
 
-					letter = current_letter
+					guess.letter = current_letter
 					break
 				}
 			} else if e.key == k2.Keyboard_Key.Backspace {
 				// Remove last letter from active row.
-				#reverse for &letter in active_row.letters {
-					if letter != Letter.None {
-						letter = Letter.None
+				#reverse for &guess in active_row.letters {
+					if guess.letter != Letter.None {
+						guess.letter = Letter.None
 						break
 					}
 				}
@@ -228,35 +268,33 @@ render_game_board :: proc(game_board: ^GameBoard) {
 	// Render grid
 	for row, _ in game_board.rows {
 		x = (screen_size.x - board_width) * 0.5
-		for letter, _ in row.letters {
-			state := game_board.letter_states[letter]
-
-			switch state {
+		for guess, _ in row.letters {
+			switch guess.state {
 			case LetterState.Default:
 				k2.draw_rect_outline(
 					{x, y, game_board.size, game_board.size},
 					2,
-					game_board.color_states[state],
+					game_board.color_states[guess.state],
 				)
 			case LetterState.Absent:
 				k2.draw_rect(
 					{x, y, game_board.size, game_board.size},
-					game_board.color_states[state],
+					game_board.color_states[guess.state],
 				)
 			case LetterState.Present:
 				k2.draw_rect(
 					{x, y, game_board.size, game_board.size},
-					game_board.color_states[state],
+					game_board.color_states[guess.state],
 				)
 			case LetterState.Correct:
 				k2.draw_rect(
 					{x, y, game_board.size, game_board.size},
-					game_board.color_states[state],
+					game_board.color_states[guess.state],
 				)
 			}
 
-			if letter != Letter.None {
-				text := reflect.enum_string(letter)
+			if guess.letter != Letter.None {
+				text := reflect.enum_string(guess.letter)
 				text_size := k2.measure_text(text, game_board.size)
 				text_centered_x := x + (game_board.size - text_size.x) * 0.5
 				text_centered_y := y + (game_board.size - text_size.y) * 0.5
@@ -352,14 +390,87 @@ keys_to_letters :: proc(key: k2.Keyboard_Key) -> Letter {
 	return .None
 }
 
-letters_to_string :: proc(letters: [5]Letter, builder: ^strings.Builder) {
+letters_to_string :: proc(guess: [5]Guess, builder: ^strings.Builder) {
 	strings.builder_reset(builder)
 
-	for letter, _ in letters {
-		if letter == Letter.None {
+	for guess, _ in guess {
+		if guess.letter == Letter.None {
 			continue
 		}
 
-		strings.write_string(builder, reflect.enum_string(letter))
+		strings.write_string(builder, reflect.enum_string(guess.letter))
 	}
+}
+
+rune_to_letter :: proc(s: rune) -> Letter {
+	switch s {
+	case 'A':
+		return Letter.A
+	case 'B':
+		return Letter.B
+	case 'C':
+		return Letter.C
+	case 'D':
+		return Letter.D
+	case 'E':
+		return Letter.E
+	case 'F':
+		return Letter.F
+	case 'G':
+		return Letter.G
+	case 'H':
+		return Letter.H
+	case 'I':
+		return Letter.I
+	case 'J':
+		return Letter.J
+	case 'K':
+		return Letter.K
+	case 'L':
+		return Letter.L
+	case 'M':
+		return Letter.M
+	case 'N':
+		return Letter.N
+	case 'O':
+		return Letter.O
+	case 'P':
+		return Letter.P
+	case 'Q':
+		return Letter.Q
+	case 'R':
+		return Letter.R
+	case 'S':
+		return Letter.S
+	case 'T':
+		return Letter.T
+	case 'U':
+		return Letter.U
+	case 'V':
+		return Letter.V
+	case 'W':
+		return Letter.W
+	case 'X':
+		return Letter.X
+	case 'Y':
+		return Letter.Y
+	case 'Z':
+		return Letter.Z
+	}
+
+	return Letter.None
+}
+
+string_to_letters :: proc(s: string) -> [5]Letter {
+	letters: [5]Letter
+
+	for r, i in s {
+		if i >= 5 {
+			break
+		}
+
+		letters[i] = rune_to_letter(r)
+	}
+
+	return letters
 }
