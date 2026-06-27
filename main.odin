@@ -36,6 +36,8 @@ Letter :: enum {
 	X,
 	Y,
 	Z,
+	Enter,
+	Delete,
 }
 
 LetterState :: enum {
@@ -68,6 +70,7 @@ GameBoard :: struct {
 	messages:       [dynamic]Message,
 	rows:           [6]Row,
 	keyboard_state: [Letter]LetterState,
+	keyboard:       [dynamic][dynamic]Letter,
 	color_states:   [LetterState]k2.Color,
 	size:           f32,
 	spacing:        f32,
@@ -160,11 +163,58 @@ main :: proc() {
 	game_board := GameBoard{}
 	game_board.size = 70
 	game_board.spacing = 5
-	game_board.color_states[.Default] = k2.DARK_GRAY
-	game_board.color_states[.Absent] = k2.DARK_GRAY
+	game_board.color_states[.Default] = {130, 131, 135, 255}
+	game_board.color_states[.Absent] = {58, 58, 60, 255}
 	game_board.color_states[.Present] = {181, 159, 59, 255}
 	game_board.color_states[.Correct] = {83, 141, 78, 255}
 
+	append(
+		&game_board.keyboard,
+		[dynamic]Letter {
+			Letter.Q,
+			Letter.W,
+			Letter.E,
+			Letter.R,
+			Letter.T,
+			Letter.Y,
+			Letter.U,
+			Letter.I,
+			Letter.O,
+			Letter.P,
+		},
+	)
+
+	append(
+		&game_board.keyboard,
+		[dynamic]Letter {
+			Letter.A,
+			Letter.S,
+			Letter.D,
+			Letter.F,
+			Letter.G,
+			Letter.H,
+			Letter.J,
+			Letter.K,
+			Letter.L,
+		},
+	)
+
+	append(
+		&game_board.keyboard,
+		[dynamic]Letter {
+			Letter.Enter,
+			Letter.Z,
+			Letter.X,
+			Letter.C,
+			Letter.V,
+			Letter.B,
+			Letter.N,
+			Letter.M,
+			Letter.Delete,
+		},
+	)
+
+	defer delete(game_board.keyboard)
 	defer delete(game_board.messages)
 
 	strings.builder_init(&game_board.builder)
@@ -288,7 +338,7 @@ render_game_board :: proc(game_board: ^GameBoard) {
 				k2.draw_rect_outline(
 					{x, y, game_board.size, game_board.size},
 					2,
-					game_board.color_states[guess.state],
+					game_board.color_states[.Absent],
 				)
 			case LetterState.Absent:
 				k2.draw_rect(
@@ -317,6 +367,35 @@ render_game_board :: proc(game_board: ^GameBoard) {
 			}
 
 			x += game_board.size + game_board.spacing
+		}
+
+		y += game_board.size + game_board.spacing
+	}
+
+
+	key_width: f32 = game_board.size * 0.65
+
+	y = screen_size.y - (game_board.size + game_board.spacing) * 3
+
+	for row in game_board.keyboard {
+		len := len(row)
+		spaces := len - 1
+		x = (screen_size.x - (key_width * f32(len) + game_board.spacing * f32(spaces))) * 0.5
+
+		for key in row {
+			k2.draw_rect(
+				{x, y, key_width, game_board.size},
+				game_board.color_states[game_board.keyboard_state[key]],
+			)
+
+			text := reflect.enum_string(key)
+			text_size := k2.measure_text(text, game_board.size * 0.5)
+			text_centered_x := x + (key_width - text_size.x) * 0.5
+			text_centered_y := y + (game_board.size - text_size.y) * 0.5
+
+			k2.draw_text(text, {text_centered_x, text_centered_y}, game_board.size * 0.5, k2.WHITE)
+
+			x += key_width + game_board.spacing
 		}
 
 		y += game_board.size + game_board.spacing
