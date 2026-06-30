@@ -4,6 +4,7 @@ package wordle
 
 import "core:fmt"
 import "core:math/rand"
+import "core:mem"
 import "core:reflect"
 import "core:strings"
 import "core:time"
@@ -85,14 +86,34 @@ GameBoard :: struct {
 }
 
 main :: proc() {
+	when ODIN_DEBUG {
+		track: mem.Tracking_Allocator
+		mem.tracking_allocator_init(&track, context.allocator)
+		context.allocator = mem.tracking_allocator(&track)
+
+		defer {
+			if len(track.allocation_map) > 0 {
+				fmt.eprintf("=== %v allocations not freed: ===\n", len(track.allocation_map))
+				for _, entry in track.allocation_map {
+					fmt.eprintf("- %v bytes @ %v\n", entry.size, entry.location)
+				}
+			}
+			mem.tracking_allocator_destroy(&track)
+		}
+	}
+
 	game_board := new_game()
-
-	defer delete(game_board.keyboard)
-	defer delete(game_board.messages)
-
 	strings.builder_init(&game_board.builder)
-	defer strings.builder_destroy(&game_board.builder)
-	defer delete(game_board.words)
+
+	defer {
+		for keys in game_board.keyboard {
+			delete(keys)
+		}
+		delete(game_board.keyboard)
+		delete(game_board.messages)
+		strings.builder_destroy(&game_board.builder)
+		delete(game_board.words)
+	}
 
 	init(&game_board)
 
