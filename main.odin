@@ -324,7 +324,7 @@ new_game :: proc() -> GameBoard {
 		"QUILT",
 	}
 
-	game_board.target_word = game_board.words[rand.int_range(0, len(game_board.words) - 1)]
+	game_board.target_word = game_board.words[rand.int_range(0, len(game_board.words))]
 
 	return game_board
 }
