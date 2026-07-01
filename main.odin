@@ -29,6 +29,12 @@ main :: proc() {
 		}
 	}
 
+	if !load_word_list() {
+		fmt.eprintln("Failed to load word list from embedded words.json")
+		return
+	}
+	defer destroy_word_list()
+
 	game_board := new_game()
 	defer destroy_game_board(&game_board)
 

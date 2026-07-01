@@ -1,5 +1,6 @@
 package wordle
 
+import "core:encoding/json"
 import "core:math/rand"
 import "core:slice"
 import "core:strings"
@@ -89,19 +90,36 @@ GameBoard :: struct {
 	target_word:    string,
 }
 
-// The dictionary of valid guesses; the target is drawn from it. Immutable data,
-// so @(rodata); a variable rather than a constant only so it can be sliced.
+// The dictionary's JSON is embedded into the binary at build time via #load, so
+// the word list ships with the program on every target -- including web, where
+// runtime file I/O isn't available. Editing words.json requires a rebuild.
 @(rodata)
-WORD_LIST := [?]string {
-	"APPLE",
-	"BANJO",
-	"CRANE",
-	"DELTA",
-	"EAGLE",
-	"FABLE",
-	"MEETS",
-	"PEEVE",
-	"QUILT",
+WORD_LIST_JSON := #load("words.json")
+
+// The parsed dictionary of valid guesses; the target is drawn from it. Populated
+// once by load_word_list at startup and owned until destroy_word_list. json
+// clones each word onto the heap, so both the slice and its strings are owned.
+word_list: []string
+
+// Parse the embedded JSON into word_list. Call once at startup, before new_game;
+// returns false (and leaves nothing allocated) if the embedded JSON is invalid.
+load_word_list :: proc() -> bool {
+	if err := json.unmarshal(WORD_LIST_JSON, &word_list); err != nil {
+		destroy_word_list()
+		return false
+	}
+
+	return true
+}
+
+// Free the heap-allocated word list. Call once at shutdown, after the last game
+// board that borrows target_word from it has been destroyed.
+destroy_word_list :: proc() {
+	for word in word_list {
+		delete(word)
+	}
+	delete(word_list)
+	word_list = nil
 }
 
 new_game :: proc() -> GameBoard {
@@ -110,7 +128,7 @@ new_game :: proc() -> GameBoard {
 	game_board.size = 70
 	game_board.spacing = 5
 	strings.builder_init(&game_board.builder)
-	game_board.target_word = WORD_LIST[rand.int_range(0, len(WORD_LIST))]
+	game_board.target_word = word_list[rand.int_range(0, len(word_list))]
 	return game_board
 }
 
@@ -174,7 +192,7 @@ submit_active_row :: proc(game_board: ^GameBoard) {
 		return
 	}
 
-	if !slice.contains(WORD_LIST[:], guess) {
+	if !slice.contains(word_list, guess) {
 		append(&game_board.messages, Message{msg_not_in_list, 0})
 		return
 	}
